@@ -3243,29 +3243,19 @@ xdg_surface_set_output(struct wl_client *client,
 }
 
 static void
-xdg_surface_set_fullscreen(struct wl_client *client,
-			   struct wl_resource *resource)
+xdg_surface_set_fullscreen(struct shell_surface *shsurf, int serial)
 {
-	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
-
-	if (shsurf->type != SHELL_SURFACE_TOPLEVEL)
-		return;
-
 	if (!shsurf->next_state.fullscreen)
 		set_fullscreen(shsurf,
 			       WL_SHELL_SURFACE_FULLSCREEN_METHOD_DEFAULT,
 			       0, shsurf->recommended_output);
+	xdg_surface_send_change_state(shsurf->resource, XDG_SURFACE_STATE_TYPE_FULLSCREEN, 1, serial);
 }
 
 static void
-xdg_surface_unset_fullscreen(struct wl_client *client,
-			     struct wl_resource *resource)
+xdg_surface_unset_fullscreen(struct shell_surface *shsurf, int serial)
 {
-	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
 	int32_t width, height;
-
-	if (shsurf->type != SHELL_SURFACE_TOPLEVEL)
-		return;
 
 	if (!shsurf->next_state.fullscreen)
 		return;
@@ -3283,30 +3273,20 @@ xdg_surface_unset_fullscreen(struct wl_client *client,
 	}
 
 	shsurf->client->send_configure(shsurf->surface, 0, width, height);
+	xdg_surface_send_change_state(shsurf->resource, XDG_SURFACE_STATE_TYPE_FULLSCREEN, 0, serial);
 }
 
 static void
-xdg_surface_set_maximized(struct wl_client *client,
-			  struct wl_resource *resource)
+xdg_surface_set_maximized(struct shell_surface *shsurf, int serial)
 {
-	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
-
-	if (shsurf->type != SHELL_SURFACE_TOPLEVEL)
-		return;
-
 	if (!shsurf->next_state.maximized)
 		set_maximized(shsurf, NULL);
+	xdg_surface_send_change_state(shsurf->resource, XDG_SURFACE_STATE_TYPE_MAXIMIZED, 1, serial);
 }
-
 static void
-xdg_surface_unset_maximized(struct wl_client *client,
-			    struct wl_resource *resource)
+xdg_surface_unset_maximized(struct shell_surface *shsurf, int serial)
 {
-	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
 	int32_t width, height;
-
-	if (shsurf->type != SHELL_SURFACE_TOPLEVEL)
-		return;
 
 	if (!shsurf->next_state.maximized)
 		return;
@@ -3324,7 +3304,50 @@ xdg_surface_unset_maximized(struct wl_client *client,
 	}
 
 	shsurf->client->send_configure(shsurf->surface, 0, width, height);
+	xdg_surface_send_change_state(shsurf->resource, XDG_SURFACE_STATE_TYPE_MAXIMIZED, 0, serial);
 }
+
+static void
+xdg_surface_request_change_state(struct wl_client *client,
+				 struct wl_resource *resource,
+				 uint32_t state_type,
+				 uint32_t value,
+				 uint32_t serial)
+{
+	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
+
+	if (shsurf->type != SHELL_SURFACE_TOPLEVEL)
+		return;
+
+	switch (state_type) {
+	case XDG_SURFACE_STATE_TYPE_MAXIMIZED:
+		if (value)
+			xdg_surface_set_maximized(shsurf, serial);
+		else
+			xdg_surface_unset_maximized(shsurf, serial);
+		break;
+	case XDG_SURFACE_STATE_TYPE_FULLSCREEN:
+		if (value)
+			xdg_surface_set_fullscreen(shsurf, serial);
+		else
+			xdg_surface_unset_fullscreen(shsurf, serial);
+		break;
+	}
+}
+
+static void
+xdg_surface_ack_change_state(struct wl_client *client,
+			     struct wl_resource *resource,
+			     uint32_t state_type,
+			     uint32_t value,
+			     uint32_t serial)
+{
+	/* Do nothing for now. In the future, we'd imagine that
+	 * we'd ignore attaches when we have a state pending that
+	 * we haven't had the client ACK'd, to prevent a race
+	 * condition when we have an in-flight attach when the
+	 * client gets the new state. */
+ }
 
 static const struct xdg_surface_interface xdg_surface_implementation = {
 	xdg_surface_destroy,
@@ -3335,10 +3358,8 @@ static const struct xdg_surface_interface xdg_surface_implementation = {
 	xdg_surface_move,
 	xdg_surface_resize,
 	xdg_surface_set_output,
-	xdg_surface_set_fullscreen,
-	xdg_surface_unset_fullscreen,
-	xdg_surface_set_maximized,
-	xdg_surface_unset_maximized,
+	xdg_surface_request_change_state,
+	xdg_surface_ack_change_state,
 	NULL /* set_minimized */
 };
 
@@ -3925,9 +3946,9 @@ maximize_binding(struct weston_seat *seat, uint32_t time, uint32_t button, void 
 		return;
 
 	if (shsurf->state.maximized)
-		xdg_surface_send_request_unset_maximized(shsurf->resource);
+		xdg_surface_unset_maximized(shsurf, wl_display_next_serial(seat->compositor->wl_display));
 	else
-		xdg_surface_send_request_set_maximized(shsurf->resource);
+		xdg_surface_set_maximized(shsurf, wl_display_next_serial(seat->compositor->wl_display));
 }
 
 static void
@@ -3949,9 +3970,9 @@ fullscreen_binding(struct weston_seat *seat, uint32_t time, uint32_t button, voi
 		return;
 
 	if (shsurf->state.fullscreen)
-		xdg_surface_send_request_unset_fullscreen(shsurf->resource);
+		xdg_surface_unset_fullscreen(shsurf, wl_display_next_serial(seat->compositor->wl_display));
 	else
-		xdg_surface_send_request_set_fullscreen(shsurf->resource);
+		xdg_surface_set_fullscreen(shsurf, wl_display_next_serial(seat->compositor->wl_display));
 }
 
 static void
