@@ -4538,7 +4538,7 @@ static const struct xdg_popup_listener xdg_popup_listener = {
 };
 
 static struct menu *
-create_menu(struct display *display,
+create_menu(struct display *display, int custom,
 	    struct input *input, uint32_t time,
 	    menu_func_t func, const char **entries, int count,
 	    void *user_data)
@@ -4550,7 +4550,7 @@ create_menu(struct display *display,
 	if (!menu)
 		return NULL;
 
-	window = window_create_internal(display, 0);
+	window = window_create_internal(display, custom);
 	if (!window) {
 		free(menu);
 		return NULL;
@@ -4589,13 +4589,13 @@ create_menu(struct display *display,
 }
 
 struct window *
-window_create_menu(struct display *display,
+window_create_menu(struct display *display, int custom,
 		   struct input *input, uint32_t time,
 		   menu_func_t func, const char **entries, int count,
 		   void *user_data)
 {
 	struct menu *menu;
-	menu = create_menu(display, input, time, func, entries, count, user_data);
+	menu = create_menu(display, custom, input, time, func, entries, count, user_data);
 
 	if (menu == NULL)
 		return NULL;
@@ -4613,7 +4613,7 @@ window_show_menu(struct display *display,
 	struct window *window;
 	int32_t ix, iy;
 
-	menu = create_menu(display, input, time, func, entries, count, parent);
+	menu = create_menu(display, 0, input, time, func, entries, count, parent);
 
 	if (menu == NULL)
 		return;
