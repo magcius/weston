@@ -212,10 +212,16 @@ struct rotate_grab {
 	} center;
 };
 
+struct window_menu_grab {
+	struct weston_pointer_grab grab;
+	struct weston_surface *menu_surface;
+};
+
 struct shell_seat {
 	struct weston_seat *seat;
 	struct wl_listener seat_destroy_listener;
 	struct weston_surface *focused_surface;
+	struct shell_surface *window_menu_surface;
 
 	struct wl_listener caps_changed_listener;
 	struct wl_listener pointer_focus_listener;
@@ -279,6 +285,9 @@ shell_surface_is_xdg_popup(struct shell_surface *shsurf);
 static void
 shell_surface_set_parent(struct shell_surface *shsurf,
                          struct weston_surface *parent);
+
+static void
+shell_surface_close(struct shell_surface *shsurf);
 
 static bool
 shell_surface_is_top_fullscreen(struct shell_surface *shsurf)
@@ -3480,6 +3489,63 @@ xdg_surface_set_title(struct wl_client *client,
 	set_title(shsurf, title);
 }
 
+static struct wl_resource *
+find_seat_resource_for_client(struct weston_seat *seat,
+			      struct wl_client *client)
+{
+	struct wl_resource *resource;
+
+	wl_resource_for_each(resource, &seat->base_resource_list) {
+		if (wl_resource_get_client(resource) == client)
+			return resource;
+	}
+
+	return NULL;
+}
+
+static void
+xdg_surface_show_window_menu(struct wl_client *client, struct wl_resource *resource,
+			     struct wl_resource *seat_resource, uint32_t serial)
+{
+	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
+	struct desktop_shell *shell = shsurf->shell;
+
+	struct weston_seat *seat = wl_resource_get_user_data(seat_resource);
+	struct shell_seat *shseat = get_shell_seat(seat);
+	struct wl_resource *desktop_shell_seat = find_seat_resource_for_client(seat, shell->child.client);
+	struct weston_surface *surface;
+	bool valid_surface = false;
+	uint32_t time;
+
+	assert (desktop_shell_seat);
+
+	if (seat->pointer &&
+	    seat->pointer->focus &&
+	    seat->pointer->button_count > 0 &&
+	    seat->pointer->grab_serial == serial) {
+		surface = weston_surface_get_main_surface(seat->pointer->focus->surface);
+		if (surface == shsurf->surface)
+			valid_surface = true;
+	} else if (seat->touch &&
+		   seat->touch->focus &&
+		   seat->touch->grab_serial == serial) {
+		surface = weston_surface_get_main_surface(seat->touch->focus->surface);
+		if (surface == shsurf->surface)
+			valid_surface = true;
+	}
+
+	if (valid_surface) {
+		/* FIXME: provide the time of the button press event somehow.
+		 * Should this be client-provided? Store it on button press somewhere? */
+		time = weston_compositor_get_time();
+
+		shseat->window_menu_surface = shsurf;
+
+		desktop_shell_send_show_window_menu(shell->child.desktop_shell,
+						    desktop_shell_seat, time);
+	}
+}
+
 static void
 xdg_surface_move(struct wl_client *client, struct wl_resource *resource,
 		 struct wl_resource *seat_resource, uint32_t serial)
@@ -3579,7 +3645,7 @@ static const struct xdg_surface_interface xdg_surface_implementation = {
 	xdg_surface_set_title,
 	xdg_surface_set_app_id,
 	NULL, /* set_surface_type */
-	NULL, /* show_window_menu */
+	xdg_surface_show_window_menu,
 	xdg_surface_move,
 	xdg_surface_resize,
 	xdg_surface_ack_configure,
@@ -4145,13 +4211,93 @@ desktop_shell_desktop_ready(struct wl_client *client,
 	shell_fade_startup(shell);
 }
 
+static void
+desktop_shell_handle_surface_destroy(struct wl_listener *listener, void *data)
+{
+	struct shell_surface *shsurf = container_of(listener,
+						    struct shell_surface,
+						    surface_destroy_listener);
+	destroy_shell_surface(shsurf);
+}
+
+static void
+desktop_shell_set_window_menu_surface(struct wl_client *client,
+				      struct wl_resource *resource,
+				      struct wl_resource *seat_resource,
+				      struct wl_resource *menu_surface_resource)
+{
+	struct desktop_shell *shell = wl_resource_get_user_data(resource);
+	struct weston_seat *seat = wl_resource_get_user_data(seat_resource);
+	struct shell_seat *shseat = get_shell_seat(seat);
+	struct weston_pointer *pointer = seat->pointer;
+	struct weston_surface *menu_surface = wl_resource_get_user_data(menu_surface_resource);
+	struct shell_surface *menu_shsurf;
+	struct weston_view *view;
+	wl_fixed_t x, y;
+
+	menu_shsurf = create_common_surface(NULL, shell, menu_surface, &xdg_popup_client);
+	menu_shsurf->type = SHELL_SURFACE_POPUP;
+	menu_shsurf->popup.shseat = shseat;
+	menu_shsurf->popup.serial = pointer->grab_serial;
+
+	view = get_primary_view(shell, shseat->window_menu_surface);
+	weston_view_from_global_fixed(view, pointer->x, pointer->y,
+				      &x, &y);
+	menu_shsurf->popup.x = wl_fixed_to_int (x);
+	menu_shsurf->popup.y = wl_fixed_to_int (y);
+	shell_surface_set_parent(menu_shsurf, shseat->window_menu_surface->surface);
+
+	/* FIXME: disgusting. Fill with a bogus resource so we don't crash
+	 * when pulling the client out from it when establishing the popup grab.
+	 *
+	 * We try to destroy this resource later, so poke into the shsurf and
+	 * replace the destroy listener. I hate myself. */
+	menu_shsurf->resource = resource;
+	menu_shsurf->surface_destroy_listener.notify = desktop_shell_handle_surface_destroy;
+}
+
+static void
+desktop_shell_window_menu_picked(struct wl_client *client,
+				 struct wl_resource *resource,
+				 struct wl_resource *seat_resource,
+				 uint32_t window_menu_response)
+{
+	struct desktop_shell *shell = wl_resource_get_user_data(resource);
+	struct weston_seat *seat = wl_resource_get_user_data (seat_resource);
+	struct weston_pointer *pointer = seat->pointer;
+	struct shell_seat *shseat = get_shell_seat(seat);
+	struct shell_surface *shsurf;
+
+	shsurf = shseat->window_menu_surface;
+
+	switch (window_menu_response) {
+	case DESKTOP_SHELL_WINDOW_MENU_RESPONSE_CLOSE_WINDOW:
+		shell_surface_close(shsurf);
+		break;
+	case DESKTOP_SHELL_WINDOW_MENU_RESPONSE_MOVE_TO_WORKSPACE_ABOVE:
+		move_surface_to_workspace(shell, shsurf, shell->workspaces.current - 1);
+		break;
+	case DESKTOP_SHELL_WINDOW_MENU_RESPONSE_MOVE_TO_WORKSPACE_BELOW:
+		move_surface_to_workspace(shell, shsurf, shell->workspaces.current + 1);
+		break;
+	case DESKTOP_SHELL_WINDOW_MENU_RESPONSE_FULLSCREEN:
+		set_fullscreen(shsurf, false);
+		break;
+	}
+
+	free(pointer->grab);
+	weston_pointer_end_grab(pointer);
+}
+
 static const struct desktop_shell_interface desktop_shell_implementation = {
 	desktop_shell_set_background,
 	desktop_shell_set_panel,
 	desktop_shell_set_lock_surface,
 	desktop_shell_unlock,
 	desktop_shell_set_grab_surface,
-	desktop_shell_desktop_ready
+	desktop_shell_desktop_ready,
+	desktop_shell_set_window_menu_surface,
+	desktop_shell_window_menu_picked,
 };
 
 static enum shell_surface_type
@@ -5354,7 +5500,7 @@ bind_desktop_shell(struct wl_client *client,
 	struct wl_resource *resource;
 
 	resource = wl_resource_create(client, &desktop_shell_interface,
-				      MIN(version, 2), id);
+				      MIN(version, 3), id);
 
 	if (client == shell->child.client) {
 		wl_resource_set_implementation(resource,
@@ -6338,7 +6484,7 @@ module_init(struct weston_compositor *ec,
 		return -1;
 
 	if (wl_global_create(ec->wl_display,
-			     &desktop_shell_interface, 2,
+			     &desktop_shell_interface, 3,
 			     shell, bind_desktop_shell) == NULL)
 		return -1;
 

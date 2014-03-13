@@ -1027,10 +1027,41 @@ desktop_shell_grab_cursor(void *data,
 	}
 }
 
+static void
+frame_menu_func(void *data, struct input *input, int index)
+{
+	struct desktop *desktop = data;
+	desktop_shell_window_menu_picked(desktop->shell, input_get_seat(input), index);
+}
+
+static void
+desktop_shell_show_window_menu(void *data,
+			       struct desktop_shell *desktop_shell,
+			       struct wl_seat *seat, uint32_t time)
+{
+	struct desktop *desktop = data;
+	struct display *display = desktop->display;
+	struct input *input = wl_seat_get_user_data(seat);
+	struct window *window;
+	struct wl_surface *surface;
+
+	static const char *entries[] = {
+		"Close",
+		"Move to workspace above", "Move to workspace below",
+		"Fullscreen"
+	};
+
+	window = window_create_menu(display, 1, input, time, frame_menu_func, entries, ARRAY_LENGTH(entries), desktop);
+	surface = window_get_wl_surface(window);
+
+	desktop_shell_set_window_menu_surface(desktop_shell, seat, surface);
+}
+
 static const struct desktop_shell_listener listener = {
 	desktop_shell_configure,
 	desktop_shell_prepare_lock_surface,
-	desktop_shell_grab_cursor
+	desktop_shell_grab_cursor,
+	desktop_shell_show_window_menu,
 };
 
 static void
@@ -1244,7 +1275,7 @@ global_handler(struct display *display, uint32_t id,
 	struct desktop *desktop = data;
 
 	if (!strcmp(interface, "desktop_shell")) {
-		desktop->interface_version = (version < 2) ? version : 2;
+		desktop->interface_version = (version < 3) ? version : 3;
 		desktop->shell = display_bind(desktop->display,
 					      id, &desktop_shell_interface,
 					      desktop->interface_version);

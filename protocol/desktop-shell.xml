@@ -1,6 +1,6 @@
 <protocol name="desktop">
 
-  <interface name="desktop_shell" version="2">
+  <interface name="desktop_shell" version="3">
     <description summary="create desktop widgets and helpers">
       Traditional user interfaces can rely on this interface to define the
       foundations of typical desktops. Currently it's possible to set up
@@ -94,6 +94,29 @@
       </description>
     </request>
 
+    <!-- Version 3 additions -->
+
+    <event name="show_window_menu" since="3">
+      <arg name="seat" type="object" interface="wl_seat"/>
+      <arg name="time" type="uint" summary="timestamp with millisecond granularity"/>
+    </event>
+
+    <request name="set_window_menu_surface" since="3">
+      <arg name="seat" type="object" interface="wl_seat"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+
+    <enum name="window_menu_response" since="3">
+      <entry name="close_window" value="0"/>
+      <entry name="move_to_workspace_above" value="1"/>
+      <entry name="move_to_workspace_below" value="2"/>
+      <entry name="fullscreen" value="3"/>
+    </enum>
+
+    <request name="window_menu_picked" since="3">
+      <arg name="seat" type="object" interface="wl_seat"/>
+      <arg name="window_menu_response" type="uint"/>
+    </request>
   </interface>
 
   <interface name="screensaver" version="1">
