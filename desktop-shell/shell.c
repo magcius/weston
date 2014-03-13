@@ -3579,6 +3579,7 @@ static const struct xdg_surface_interface xdg_surface_implementation = {
 	xdg_surface_set_title,
 	xdg_surface_set_app_id,
 	NULL, /* set_surface_type */
+	NULL, /* show_window_menu */
 	xdg_surface_move,
 	xdg_surface_resize,
 	xdg_surface_ack_configure,
