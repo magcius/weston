@@ -1970,7 +1970,7 @@ static void
 handle_shell_client_destroy(struct wl_listener *listener, void *data);
 
 static int
-xdg_ping_timeout_handler(void *data)
+ping_timeout_handler(void *data)
 {
 	struct shell_client *sc = data;
 	struct weston_seat *seat;
@@ -1994,7 +1994,7 @@ xdg_ping_timeout_handler(void *data)
 }
 
 static void
-handle_xdg_ping(struct shell_surface *shsurf, uint32_t serial)
+shell_surface_ping(struct shell_surface *shsurf, uint32_t serial)
 {
 	struct weston_compositor *compositor = shsurf->shell->compositor;
 	struct shell_client *sc = shsurf->owner;
@@ -2002,7 +2002,7 @@ handle_xdg_ping(struct shell_surface *shsurf, uint32_t serial)
 	static const int ping_timeout = 200;
 
 	if (sc->unresponsive) {
-		xdg_ping_timeout_handler(sc);
+		ping_timeout_handler(sc);
 		return;
 	}
 
@@ -2011,7 +2011,7 @@ handle_xdg_ping(struct shell_surface *shsurf, uint32_t serial)
 	if (sc->ping_timer == NULL)
 		sc->ping_timer =
 			wl_event_loop_add_timer(loop,
-						xdg_ping_timeout_handler, sc);
+						ping_timeout_handler, sc);
 	if (sc->ping_timer == NULL)
 		return;
 
@@ -2025,7 +2025,7 @@ handle_xdg_ping(struct shell_surface *shsurf, uint32_t serial)
 }
 
 static void
-ping_handler(struct weston_surface *surface, uint32_t serial)
+surface_maybe_ping(struct weston_surface *surface, uint32_t serial)
 {
 	struct shell_surface *shsurf = get_shell_surface(surface);
 
@@ -2036,7 +2036,7 @@ ping_handler(struct weston_surface *surface, uint32_t serial)
 	if (shsurf->surface == shsurf->shell->grab_surface)
 		return;
 
-	handle_xdg_ping(shsurf, serial);
+	shell_surface_ping(shsurf, serial);
 }
 
 static void
@@ -2052,7 +2052,7 @@ handle_pointer_focus(struct wl_listener *listener, void *data)
 
 	compositor = view->surface->compositor;
 	serial = wl_display_next_serial(compositor->wl_display);
-	ping_handler(view->surface, serial);
+	surface_maybe_ping(view->surface, serial);
 }
 
 static void
