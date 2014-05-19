@@ -2410,17 +2410,31 @@ shell_surface_set_transient(struct wl_client *client,
 }
 
 static void
-set_fullscreen(struct shell_surface *shsurf,
-	       uint32_t method,
-	       uint32_t framerate,
-	       struct weston_output *output)
+set_fullscreen_params(struct shell_surface *shsurf,
+		      uint32_t method,
+		      uint32_t framerate,
+		      struct weston_output *output)
 {
 	shell_surface_set_output(shsurf, output);
-	shsurf->type = SHELL_SURFACE_TOPLEVEL;
 
 	shsurf->fullscreen_output = shsurf->output;
 	shsurf->fullscreen.type = method;
 	shsurf->fullscreen.framerate = framerate;
+}
+
+static void
+set_fullscreen(struct shell_surface *shsurf,
+	       int fullscreen)
+{
+	shsurf->type = SHELL_SURFACE_TOPLEVEL;
+
+	if (shell_surface_is_xdg_surface(shsurf)) {
+		shsurf->state_requested = true;
+		shsurf->requested_state.fullscreen = fullscreen;
+	} else if (shell_surface_is_wl_shell_surface(shsurf)) { /* wl_shell_surface, xwayland */
+		shsurf->state_changed = true;
+		shsurf->next_state.fullscreen = fullscreen;
+	}
 
 	send_configure_for_surface(shsurf);
 }
@@ -2481,9 +2495,9 @@ shell_surface_set_fullscreen(struct wl_client *client,
 	shell_surface_set_parent(shsurf, NULL);
 
 	surface_clear_next_states(shsurf);
-	shsurf->next_state.fullscreen = true;
-	shsurf->state_changed = true;
-	set_fullscreen(shsurf, method, framerate, output);
+
+	set_fullscreen_params(shsurf, method, framerate, output);
+	set_fullscreen(shsurf, true);
 }
 
 static void
@@ -2876,10 +2890,9 @@ shell_interface_set_fullscreen(struct shell_surface *shsurf,
 			       struct weston_output *output)
 {
 	surface_clear_next_states(shsurf);
-	set_fullscreen(shsurf, method, framerate, output);
 
-	shsurf->next_state.fullscreen = true;
-	shsurf->state_changed = true;
+	set_fullscreen_params(shsurf, method, framerate, output);
+	set_fullscreen(shsurf, true);
 }
 
 static int
@@ -3526,9 +3539,6 @@ xdg_surface_set_fullscreen(struct wl_client *client,
 	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
 	struct weston_output *output;
 
-	shsurf->state_requested = true;
-	shsurf->requested_state.fullscreen = true;
-
 	if (output_resource)
 		output = wl_resource_get_user_data(output_resource);
 	else
@@ -3537,7 +3547,7 @@ xdg_surface_set_fullscreen(struct wl_client *client,
 	shell_surface_set_output(shsurf, output);
 	shsurf->fullscreen_output = shsurf->output;
 
-	send_configure_for_surface(shsurf);
+	set_fullscreen(shsurf, true);
 }
 
 static void
@@ -3546,9 +3556,7 @@ xdg_surface_unset_fullscreen(struct wl_client *client,
 {
 	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
 
-	shsurf->state_requested = true;
-	shsurf->requested_state.fullscreen = false;
-	send_configure_for_surface(shsurf);
+	set_fullscreen(shsurf, false);
 }
 
 static void
@@ -4217,12 +4225,7 @@ fullscreen_binding(struct weston_seat *seat, uint32_t time, uint32_t button, voi
 	if (shsurf == NULL)
 		return;
 
-	if (!shell_surface_is_xdg_surface(shsurf))
-		return;
-
-	shsurf->state_requested = true;
-	shsurf->requested_state.fullscreen = !shsurf->state.fullscreen;
-	send_configure_for_surface(shsurf);
+	set_fullscreen(shsurf, !shsurf->state.fullscreen);
 }
 
 static void
