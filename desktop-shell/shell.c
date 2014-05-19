@@ -1685,8 +1685,8 @@ common_surface_move(struct wl_resource *resource,
 }
 
 static void
-shell_surface_move(struct wl_client *client, struct wl_resource *resource,
-		   struct wl_resource *seat_resource, uint32_t serial)
+wl_shell_surface_move(struct wl_client *client, struct wl_resource *resource,
+		      struct wl_resource *seat_resource, uint32_t serial)
 {
 	common_surface_move(resource, seat_resource, serial);
 }
@@ -1872,9 +1872,9 @@ common_surface_resize(struct wl_resource *resource,
 }
 
 static void
-shell_surface_resize(struct wl_client *client, struct wl_resource *resource,
-		     struct wl_resource *seat_resource, uint32_t serial,
-		     uint32_t edges)
+wl_shell_surface_resize(struct wl_client *client, struct wl_resource *resource,
+			struct wl_resource *seat_resource, uint32_t serial,
+			uint32_t edges)
 {
 	common_surface_resize(resource, seat_resource, serial, edges);
 }
@@ -2149,8 +2149,8 @@ shell_client_pong(struct shell_client *sc, uint32_t serial)
 }
 
 static void
-shell_surface_pong(struct wl_client *client,
-		   struct wl_resource *resource, uint32_t serial)
+wl_shell_surface_pong(struct wl_client *client,
+		      struct wl_resource *resource, uint32_t serial)
 {
 	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
 	struct shell_client *sc = shsurf->owner;
@@ -2177,8 +2177,8 @@ set_margin(struct shell_surface *shsurf,
 }
 
 static void
-shell_surface_set_title(struct wl_client *client,
-			struct wl_resource *resource, const char *title)
+wl_shell_surface_set_title(struct wl_client *client,
+			   struct wl_resource *resource, const char *title)
 {
 	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
 
@@ -2186,8 +2186,8 @@ shell_surface_set_title(struct wl_client *client,
 }
 
 static void
-shell_surface_set_class(struct wl_client *client,
-			struct wl_resource *resource, const char *class)
+wl_shell_surface_set_class(struct wl_client *client,
+			   struct wl_resource *resource, const char *class)
 {
 	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
 
@@ -2366,8 +2366,8 @@ set_toplevel(struct shell_surface *shsurf)
 }
 
 static void
-shell_surface_set_toplevel(struct wl_client *client,
-			   struct wl_resource *resource)
+wl_shell_surface_set_toplevel(struct wl_client *client,
+			      struct wl_resource *resource)
 {
 	struct shell_surface *surface = wl_resource_get_user_data(resource);
 
@@ -2397,10 +2397,10 @@ set_transient(struct shell_surface *shsurf,
 }
 
 static void
-shell_surface_set_transient(struct wl_client *client,
-			    struct wl_resource *resource,
-			    struct wl_resource *parent_resource,
-			    int x, int y, uint32_t flags)
+wl_shell_surface_set_transient(struct wl_client *client,
+			       struct wl_resource *resource,
+			       struct wl_resource *parent_resource,
+			       int x, int y, uint32_t flags)
 {
 	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
 	struct weston_surface *parent =
@@ -2478,11 +2478,11 @@ unset_fullscreen(struct shell_surface *shsurf)
 }
 
 static void
-shell_surface_set_fullscreen(struct wl_client *client,
-			     struct wl_resource *resource,
-			     uint32_t method,
-			     uint32_t framerate,
-			     struct wl_resource *output_resource)
+wl_shell_surface_set_fullscreen(struct wl_client *client,
+				struct wl_resource *resource,
+				uint32_t method,
+				uint32_t framerate,
+				struct wl_resource *output_resource)
 {
 	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
 	struct weston_output *output;
@@ -2519,12 +2519,12 @@ set_popup(struct shell_surface *shsurf,
 }
 
 static void
-shell_surface_set_popup(struct wl_client *client,
-			struct wl_resource *resource,
-			struct wl_resource *seat_resource,
-			uint32_t serial,
-			struct wl_resource *parent_resource,
-			int32_t x, int32_t y, uint32_t flags)
+wl_shell_surface_set_popup(struct wl_client *client,
+			   struct wl_resource *resource,
+			   struct wl_resource *seat_resource,
+			   uint32_t serial,
+			   struct wl_resource *parent_resource,
+			   int32_t x, int32_t y, uint32_t flags)
 {
 	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
 	struct weston_surface *parent =
@@ -2608,9 +2608,9 @@ set_minimized(struct weston_surface *surface, uint32_t is_true)
 }
 
 static void
-shell_surface_set_maximized(struct wl_client *client,
-                            struct wl_resource *resource,
-                            struct wl_resource *output_resource)
+wl_shell_surface_set_maximized(struct wl_client *client,
+			       struct wl_resource *resource,
+			       struct wl_resource *output_resource)
 {
 	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
 	struct weston_output *output;
@@ -3175,16 +3175,16 @@ shell_map_popup(struct shell_surface *shsurf)
 }
 
 static const struct wl_shell_surface_interface shell_surface_implementation = {
-	shell_surface_pong,
-	shell_surface_move,
-	shell_surface_resize,
-	shell_surface_set_toplevel,
-	shell_surface_set_transient,
-	shell_surface_set_fullscreen,
-	shell_surface_set_popup,
-	shell_surface_set_maximized,
-	shell_surface_set_title,
-	shell_surface_set_class
+	wl_shell_surface_pong,
+	wl_shell_surface_move,
+	wl_shell_surface_resize,
+	wl_shell_surface_set_toplevel,
+	wl_shell_surface_set_transient,
+	wl_shell_surface_set_fullscreen,
+	wl_shell_surface_set_popup,
+	wl_shell_surface_set_maximized,
+	wl_shell_surface_set_title,
+	wl_shell_surface_set_class
 };
 
 static void
