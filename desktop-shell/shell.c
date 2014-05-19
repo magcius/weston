@@ -5803,6 +5803,41 @@ surface_kill(struct weston_compositor *compositor,
 }
 
 static void
+delete_ping_failed(struct shell_surface *shsurf)
+{
+	surface_kill(shsurf->shell->compositor, shsurf->surface);
+}
+
+static void
+delete_ping_handler(int is_alive, void *data)
+{
+	struct shell_surface *shsurf = data;
+
+	if (!is_alive)
+		delete_ping_failed(shsurf);
+}
+
+static void
+shell_surface_close(struct shell_surface *shsurf)
+{
+	struct desktop_shell *shell = shsurf->shell;
+	struct weston_compositor *compositor = shell->compositor;
+	int sent_close = 0;
+
+	if (shell_surface_is_xdg_surface(shsurf)) {
+		xdg_surface_send_close(shsurf->resource);
+		sent_close = 1;
+	}
+
+	if (sent_close) {
+		uint32_t serial = wl_display_next_serial(compositor->wl_display);
+		shell_surface_ping(shsurf, serial, delete_ping_handler, shsurf);
+	} else {
+		delete_ping_failed(shsurf);
+	}
+}
+
+static void
 force_kill_binding(struct weston_seat *seat, uint32_t time, uint32_t key,
 		   void *data)
 {
@@ -5815,6 +5850,24 @@ force_kill_binding(struct weston_seat *seat, uint32_t time, uint32_t key,
 		return;
 
 	surface_kill(compositor, focus_surface);
+}
+
+static void
+close_window_binding(struct weston_seat *seat, uint32_t time, uint32_t key,
+		     void *data)
+{
+	struct weston_surface *focus_surface;
+	struct shell_surface *shsurf;
+
+	focus_surface = seat->keyboard->focus;
+	if (!focus_surface)
+		return;
+
+	shsurf = get_shell_surface(focus_surface);
+	if (!shsurf)
+		return;
+
+	shell_surface_close(shsurf);
 }
 
 static void
@@ -6161,6 +6214,8 @@ shell_add_bindings(struct weston_compositor *ec, struct desktop_shell *shell)
 				          backlight_binding, ec);
 	weston_compositor_add_key_binding(ec, KEY_K, mod,
 				          force_kill_binding, shell);
+	weston_compositor_add_key_binding(ec, KEY_F4, mod,
+				          close_window_binding, shell);
 	weston_compositor_add_key_binding(ec, KEY_UP, mod,
 					  workspace_up_binding, shell);
 	weston_compositor_add_key_binding(ec, KEY_DOWN, mod,
