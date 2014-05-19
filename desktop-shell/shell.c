@@ -5783,22 +5783,15 @@ debug_binding(struct weston_seat *seat, uint32_t time, uint32_t key, void *data)
 }
 
 static void
-force_kill_binding(struct weston_seat *seat, uint32_t time, uint32_t key,
-		   void *data)
+surface_kill(struct weston_compositor *compositor,
+	     struct weston_surface *surface)
 {
-	struct weston_surface *focus_surface;
 	struct wl_client *client;
-	struct desktop_shell *shell = data;
-	struct weston_compositor *compositor = shell->compositor;
 	pid_t pid;
 
-	focus_surface = seat->keyboard->focus;
-	if (!focus_surface)
-		return;
+	wl_signal_emit(&compositor->kill_signal, surface);
 
-	wl_signal_emit(&compositor->kill_signal, focus_surface);
-
-	client = wl_resource_get_client(focus_surface->resource);
+	client = wl_resource_get_client(surface->resource);
 	wl_client_get_credentials(client, &pid, NULL, NULL);
 
 	/* Skip clients that we launched ourselves (the credentials of
@@ -5807,6 +5800,21 @@ force_kill_binding(struct weston_seat *seat, uint32_t time, uint32_t key,
 		return;
 
 	kill(pid, SIGKILL);
+}
+
+static void
+force_kill_binding(struct weston_seat *seat, uint32_t time, uint32_t key,
+		   void *data)
+{
+	struct weston_surface *focus_surface;
+	struct desktop_shell *shell = data;
+	struct weston_compositor *compositor = shell->compositor;
+
+	focus_surface = seat->keyboard->focus;
+	if (!focus_surface)
+		return;
+
+	surface_kill(compositor, focus_surface);
 }
 
 static void
