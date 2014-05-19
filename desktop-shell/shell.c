@@ -229,13 +229,22 @@ struct shell_seat {
 	} popup_grab;
 };
 
+struct shell_ping {
+	struct shell_client *client;
+
+	struct wl_list link;
+	uint32_t serial;
+	void (*callback) (int is_alive, void *data);
+	void *callback_data;
+	struct wl_event_source *timer;
+};
+
 struct shell_client {
 	struct wl_resource *resource;
 	struct wl_client *client;
 	struct desktop_shell *shell;
 	struct wl_listener destroy_listener;
-	struct wl_event_source *ping_timer;
-	uint32_t ping_serial;
+	struct wl_list pings;
 	int unresponsive;
 };
 
@@ -1969,59 +1978,95 @@ end_busy_cursor(struct weston_compositor *compositor, struct wl_client *client)
 static void
 handle_shell_client_destroy(struct wl_listener *listener, void *data);
 
+static void
+ping_free(struct shell_ping *ping)
+{
+	wl_list_remove(&ping->link);
+	wl_event_source_remove(ping->timer);
+	free(ping);
+}
+
 static int
 ping_timeout_handler(void *data)
 {
-	struct shell_client *sc = data;
-	struct weston_seat *seat;
-	struct shell_surface *shsurf;
+	struct shell_ping *ping = data;
+	struct shell_client *sc = ping->client;
 
 	/* Client is not responding */
 	sc->unresponsive = 1;
-	wl_list_for_each(seat, &sc->shell->compositor->seat_list, link) {
-		if (seat->pointer == NULL || seat->pointer->focus == NULL)
-			continue;
-		if (seat->pointer->focus->surface->resource == NULL)
-			continue;
-		
-		shsurf = get_shell_surface(seat->pointer->focus->surface);
-		if (shsurf &&
-		    wl_resource_get_client(shsurf->resource) == sc->client)
-			set_busy_cursor(shsurf, seat->pointer);
-	}
+	ping->callback(0, ping->callback_data);
+	ping_free(ping);
 
 	return 1;
 }
 
+static struct shell_ping *
+find_ping_for_serial(struct shell_client *sc, uint32_t serial)
+{
+	struct shell_ping *ping = NULL;
+	wl_list_for_each(ping, &sc->pings, link) {
+		if (ping->serial == serial)
+			return ping;
+	}
+	return NULL;
+}
+
 static void
-shell_surface_ping(struct shell_surface *shsurf, uint32_t serial)
+shell_surface_ping(struct shell_surface *shsurf, uint32_t serial,
+		   void (*callback) (int is_alive, void *data), void *callback_data)
 {
 	struct weston_compositor *compositor = shsurf->shell->compositor;
 	struct shell_client *sc = shsurf->owner;
+	struct shell_ping *ping;
 	struct wl_event_loop *loop;
 	static const int ping_timeout = 200;
 
 	if (sc->unresponsive) {
-		ping_timeout_handler(sc);
+		callback(0, callback_data);
 		return;
 	}
 
-	sc->ping_serial = serial;
-	loop = wl_display_get_event_loop(compositor->wl_display);
-	if (sc->ping_timer == NULL)
-		sc->ping_timer =
-			wl_event_loop_add_timer(loop,
-						ping_timeout_handler, sc);
-	if (sc->ping_timer == NULL)
-		return;
+	ping = malloc(sizeof *ping);
+	ping->client = sc;
+	ping->serial = serial;
+	ping->callback = callback;
+	ping->callback_data = callback_data;
 
-	wl_event_source_timer_update(sc->ping_timer, ping_timeout);
+	loop = wl_display_get_event_loop(compositor->wl_display);
+	ping->timer = wl_event_loop_add_timer(loop, ping_timeout_handler, ping);
+	wl_event_source_timer_update(ping->timer, ping_timeout);
+
+	wl_list_insert(&sc->pings, &ping->link);
 
 	if (shell_surface_is_xdg_surface(shsurf) ||
 	    shell_surface_is_xdg_popup(shsurf))
 		xdg_shell_send_ping(sc->resource, serial);
 	else if (shell_surface_is_wl_shell_surface(shsurf))
 		wl_shell_surface_send_ping(shsurf->resource, serial);
+}
+
+static void
+maybe_ping_handler(int is_alive, void *data)
+{
+	struct shell_surface *shsurf = data;
+	struct shell_client *sc = shsurf->owner;
+
+	if (is_alive) {
+		end_busy_cursor(sc->shell->compositor, sc->client);
+	} else {
+		struct weston_seat *seat;
+		wl_list_for_each(seat, &sc->shell->compositor->seat_list, link) {
+			if (seat->pointer == NULL || seat->pointer->focus == NULL)
+				continue;
+			if (seat->pointer->focus->surface->resource == NULL)
+				continue;
+
+			shsurf = get_shell_surface(seat->pointer->focus->surface);
+			if (shsurf &&
+			    wl_resource_get_client(shsurf->resource) == sc->client)
+				set_busy_cursor(shsurf, seat->pointer);
+		}
+	}
 }
 
 static void
@@ -2036,7 +2081,7 @@ surface_maybe_ping(struct weston_surface *surface, uint32_t serial)
 	if (shsurf->surface == shsurf->shell->grab_surface)
 		return;
 
-	shell_surface_ping(shsurf, serial);
+	shell_surface_ping(shsurf, serial, maybe_ping_handler, shsurf);
 }
 
 static void
@@ -2093,17 +2138,14 @@ handle_keyboard_focus(struct wl_listener *listener, void *data)
 static void
 shell_client_pong(struct shell_client *sc, uint32_t serial)
 {
-	if (sc->ping_serial != serial)
+	struct shell_ping *ping = find_ping_for_serial(sc, serial);
+
+	if (!ping)
 		return;
 
+	ping_free(ping);
 	sc->unresponsive = 0;
-	end_busy_cursor(sc->shell->compositor, sc->client);
-
-	if (sc->ping_timer) {
-		wl_event_source_remove(sc->ping_timer);
-		sc->ping_timer = NULL;
-	}
-
+	ping->callback(1, ping->callback_data);
 }
 
 static void
@@ -5226,9 +5268,11 @@ handle_shell_client_destroy(struct wl_listener *listener, void *data)
 {
 	struct shell_client *sc =
 		container_of(listener, struct shell_client, destroy_listener);
+	struct shell_ping *ping, *next;
 
-	if (sc->ping_timer)
-		wl_event_source_remove(sc->ping_timer);
+	wl_list_for_each_safe(ping, next, &sc->pings, link)
+		ping_free(ping);
+
 	free(sc);
 }
 
