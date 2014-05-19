@@ -1684,13 +1684,6 @@ common_surface_move(struct wl_resource *resource,
 	}
 }
 
-static void
-wl_shell_surface_move(struct wl_client *client, struct wl_resource *resource,
-		      struct wl_resource *seat_resource, uint32_t serial)
-{
-	common_surface_move(resource, seat_resource, serial);
-}
-
 struct weston_resize_grab {
 	struct shell_grab base;
 	uint32_t edges;
@@ -1869,14 +1862,6 @@ common_surface_resize(struct wl_resource *resource,
 
 	if (surface_resize(shsurf, seat, edges) < 0)
 		wl_resource_post_no_memory(resource);
-}
-
-static void
-wl_shell_surface_resize(struct wl_client *client, struct wl_resource *resource,
-			struct wl_resource *seat_resource, uint32_t serial,
-			uint32_t edges)
-{
-	common_surface_resize(resource, seat_resource, serial, edges);
 }
 
 static void
@@ -2149,16 +2134,6 @@ shell_client_pong(struct shell_client *sc, uint32_t serial)
 }
 
 static void
-wl_shell_surface_pong(struct wl_client *client,
-		      struct wl_resource *resource, uint32_t serial)
-{
-	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
-	struct shell_client *sc = shsurf->owner;
-
-	shell_client_pong(sc, serial);
-}
-
-static void
 set_title(struct shell_surface *shsurf, const char *title)
 {
 	free(shsurf->title);
@@ -2174,25 +2149,6 @@ set_margin(struct shell_surface *shsurf,
 	shsurf->next_margin.top = top;
 	shsurf->next_margin.bottom = bottom;
 	shsurf->has_next_margin = true;
-}
-
-static void
-wl_shell_surface_set_title(struct wl_client *client,
-			   struct wl_resource *resource, const char *title)
-{
-	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
-
-	set_title(shsurf, title);
-}
-
-static void
-wl_shell_surface_set_class(struct wl_client *client,
-			   struct wl_resource *resource, const char *class)
-{
-	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
-
-	free(shsurf->class);
-	shsurf->class = strdup(class);
 }
 
 static void
@@ -2366,15 +2322,6 @@ set_toplevel(struct shell_surface *shsurf)
 }
 
 static void
-wl_shell_surface_set_toplevel(struct wl_client *client,
-			      struct wl_resource *resource)
-{
-	struct shell_surface *surface = wl_resource_get_user_data(resource);
-
-	set_toplevel(surface);
-}
-
-static void
 set_transient(struct shell_surface *shsurf,
 	      struct weston_surface *parent, int x, int y, uint32_t flags)
 {
@@ -2394,19 +2341,6 @@ set_transient(struct shell_surface *shsurf,
 
 	/* The layer_link is updated in set_surface_type(),
 	 * called from configure. */
-}
-
-static void
-wl_shell_surface_set_transient(struct wl_client *client,
-			       struct wl_resource *resource,
-			       struct wl_resource *parent_resource,
-			       int x, int y, uint32_t flags)
-{
-	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
-	struct weston_surface *parent =
-		wl_resource_get_user_data(parent_resource);
-
-	set_transient(shsurf, parent, x, y, flags);
 }
 
 static void
@@ -2478,29 +2412,6 @@ unset_fullscreen(struct shell_surface *shsurf)
 }
 
 static void
-wl_shell_surface_set_fullscreen(struct wl_client *client,
-				struct wl_resource *resource,
-				uint32_t method,
-				uint32_t framerate,
-				struct wl_resource *output_resource)
-{
-	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
-	struct weston_output *output;
-
-	if (output_resource)
-		output = wl_resource_get_user_data(output_resource);
-	else
-		output = NULL;
-
-	shell_surface_set_parent(shsurf, NULL);
-
-	surface_clear_next_states(shsurf);
-
-	set_fullscreen_params(shsurf, method, framerate, output);
-	set_fullscreen(shsurf, true);
-}
-
-static void
 set_popup(struct shell_surface *shsurf,
           struct weston_surface *parent,
           struct weston_seat *seat,
@@ -2516,27 +2427,6 @@ set_popup(struct shell_surface *shsurf,
 	shsurf->popup.y = y;
 
 	shsurf->type = SHELL_SURFACE_POPUP;
-}
-
-static void
-wl_shell_surface_set_popup(struct wl_client *client,
-			   struct wl_resource *resource,
-			   struct wl_resource *seat_resource,
-			   uint32_t serial,
-			   struct wl_resource *parent_resource,
-			   int32_t x, int32_t y, uint32_t flags)
-{
-	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
-	struct weston_surface *parent =
-		wl_resource_get_user_data(parent_resource);
-
-	shell_surface_set_parent(shsurf, parent);
-
-	surface_clear_next_states(shsurf);
-	set_popup(shsurf,
-	          parent,
-	          wl_resource_get_user_data(seat_resource),
-	          serial, x, y);
 }
 
 static void
@@ -2605,31 +2495,6 @@ set_minimized(struct weston_surface *surface, uint32_t is_true)
 	shell_surface_update_child_surface_layers(shsurf);
 
 	weston_view_damage_below(view);
-}
-
-static void
-wl_shell_surface_set_maximized(struct wl_client *client,
-			       struct wl_resource *resource,
-			       struct wl_resource *output_resource)
-{
-	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
-	struct weston_output *output;
-
-	surface_clear_next_states(shsurf);
-	shsurf->next_state.maximized = true;
-	shsurf->state_changed = true;
-
-	shsurf->type = SHELL_SURFACE_TOPLEVEL;
-	shell_surface_set_parent(shsurf, NULL);
-
-	if (output_resource)
-		output = wl_resource_get_user_data(output_resource);
-	else
-		output = NULL;
-
-	shell_surface_set_output(shsurf, output);
-
-	send_configure_for_surface(shsurf);
 }
 
 /* This is only ever called from set_surface_type(), so there’s no need to
@@ -3172,6 +3037,141 @@ shell_map_popup(struct shell_surface *shsurf)
 		shell_surface_send_popup_done(shsurf);
 		shseat->popup_grab.client = NULL;
 	}
+}
+
+static void
+wl_shell_surface_pong(struct wl_client *client,
+		      struct wl_resource *resource, uint32_t serial)
+{
+	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
+	struct shell_client *sc = shsurf->owner;
+
+	shell_client_pong(sc, serial);
+}
+
+static void
+wl_shell_surface_move(struct wl_client *client, struct wl_resource *resource,
+		      struct wl_resource *seat_resource, uint32_t serial)
+{
+	common_surface_move(resource, seat_resource, serial);
+}
+
+static void
+wl_shell_surface_resize(struct wl_client *client, struct wl_resource *resource,
+			struct wl_resource *seat_resource, uint32_t serial,
+			uint32_t edges)
+{
+	common_surface_resize(resource, seat_resource, serial, edges);
+}
+
+static void
+wl_shell_surface_set_toplevel(struct wl_client *client,
+			      struct wl_resource *resource)
+{
+	struct shell_surface *surface = wl_resource_get_user_data(resource);
+
+	set_toplevel(surface);
+}
+
+static void
+wl_shell_surface_set_transient(struct wl_client *client,
+			       struct wl_resource *resource,
+			       struct wl_resource *parent_resource,
+			       int x, int y, uint32_t flags)
+{
+	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
+	struct weston_surface *parent =
+		wl_resource_get_user_data(parent_resource);
+
+	set_transient(shsurf, parent, x, y, flags);
+}
+
+static void
+wl_shell_surface_set_fullscreen(struct wl_client *client,
+				struct wl_resource *resource,
+				uint32_t method,
+				uint32_t framerate,
+				struct wl_resource *output_resource)
+{
+	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
+	struct weston_output *output;
+
+	if (output_resource)
+		output = wl_resource_get_user_data(output_resource);
+	else
+		output = NULL;
+
+	shell_surface_set_parent(shsurf, NULL);
+
+	surface_clear_next_states(shsurf);
+
+	set_fullscreen_params(shsurf, method, framerate, output);
+	set_fullscreen(shsurf, true);
+}
+
+static void
+wl_shell_surface_set_popup(struct wl_client *client,
+			   struct wl_resource *resource,
+			   struct wl_resource *seat_resource,
+			   uint32_t serial,
+			   struct wl_resource *parent_resource,
+			   int32_t x, int32_t y, uint32_t flags)
+{
+	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
+	struct weston_surface *parent =
+		wl_resource_get_user_data(parent_resource);
+
+	shell_surface_set_parent(shsurf, parent);
+
+	surface_clear_next_states(shsurf);
+	set_popup(shsurf,
+	          parent,
+	          wl_resource_get_user_data(seat_resource),
+	          serial, x, y);
+}
+
+static void
+wl_shell_surface_set_maximized(struct wl_client *client,
+			       struct wl_resource *resource,
+			       struct wl_resource *output_resource)
+{
+	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
+	struct weston_output *output;
+
+	surface_clear_next_states(shsurf);
+	shsurf->next_state.maximized = true;
+	shsurf->state_changed = true;
+
+	shsurf->type = SHELL_SURFACE_TOPLEVEL;
+	shell_surface_set_parent(shsurf, NULL);
+
+	if (output_resource)
+		output = wl_resource_get_user_data(output_resource);
+	else
+		output = NULL;
+
+	shell_surface_set_output(shsurf, output);
+
+	send_configure_for_surface(shsurf);
+}
+
+static void
+wl_shell_surface_set_title(struct wl_client *client,
+			   struct wl_resource *resource, const char *title)
+{
+	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
+
+	set_title(shsurf, title);
+}
+
+static void
+wl_shell_surface_set_class(struct wl_client *client,
+			   struct wl_resource *resource, const char *class)
+{
+	struct shell_surface *shsurf = wl_resource_get_user_data(resource);
+
+	free(shsurf->class);
+	shsurf->class = strdup(class);
 }
 
 static const struct wl_shell_surface_interface shell_surface_implementation = {
