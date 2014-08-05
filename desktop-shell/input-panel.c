@@ -346,16 +346,16 @@ bind_input_panel(struct wl_client *client,
 	resource = wl_resource_create(client,
 				      &wl_input_panel_interface, 1, id);
 
-	if (shell->input_panel.binding == NULL) {
-		wl_resource_set_implementation(resource,
-					       &input_panel_implementation,
-					       shell, unbind_input_panel);
-		shell->input_panel.binding = resource;
+	if (shell->input_panel.binding != NULL) {
+		wl_resource_post_error(resource, WL_DISPLAY_ERROR_INVALID_OBJECT,
+				       "interface object already bound");
 		return;
 	}
 
-	wl_resource_post_error(resource, WL_DISPLAY_ERROR_INVALID_OBJECT,
-			       "interface object already bound");
+	wl_resource_set_implementation(resource,
+				       &input_panel_implementation,
+				       shell, unbind_input_panel);
+	shell->input_panel.binding = resource;
 }
 
 void

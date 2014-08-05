@@ -5333,20 +5333,19 @@ bind_desktop_shell(struct wl_client *client,
 	resource = wl_resource_create(client, &desktop_shell_interface,
 				      MIN(version, 2), id);
 
-	if (client == shell->child.client) {
-		wl_resource_set_implementation(resource,
-					       &desktop_shell_implementation,
-					       shell, unbind_desktop_shell);
-		shell->child.desktop_shell = resource;
-
-		if (version < 2)
-			shell_fade_startup(shell);
-
+	if (client != shell->child.client) {
+		wl_resource_post_error(resource, WL_DISPLAY_ERROR_INVALID_OBJECT,
+				       "permission to bind desktop_shell denied");
 		return;
 	}
 
-	wl_resource_post_error(resource, WL_DISPLAY_ERROR_INVALID_OBJECT,
-			       "permission to bind desktop_shell denied");
+	wl_resource_set_implementation(resource,
+				       &desktop_shell_implementation,
+				       shell, unbind_desktop_shell);
+	shell->child.desktop_shell = resource;
+
+	if (version < 2)
+		shell_fade_startup(shell);
 }
 
 static void
@@ -5420,16 +5419,16 @@ bind_screensaver(struct wl_client *client,
 
 	resource = wl_resource_create(client, &screensaver_interface, 1, id);
 
-	if (shell->screensaver.binding == NULL) {
-		wl_resource_set_implementation(resource,
-					       &screensaver_implementation,
-					       shell, unbind_screensaver);
-		shell->screensaver.binding = resource;
+	if (shell->screensaver.binding != NULL) {
+		wl_resource_post_error(resource, WL_DISPLAY_ERROR_INVALID_OBJECT,
+				       "interface object already bound");
 		return;
 	}
 
-	wl_resource_post_error(resource, WL_DISPLAY_ERROR_INVALID_OBJECT,
-			       "interface object already bound");
+	wl_resource_set_implementation(resource,
+				       &screensaver_implementation,
+				       shell, unbind_screensaver);
+	shell->screensaver.binding = resource;
 }
 
 struct switcher {
