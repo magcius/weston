@@ -862,19 +862,8 @@ static const struct wl_data_device_manager_interface manager_interface = {
 };
 
 static void
-bind_manager(struct wl_client *client,
-	     void *data, uint32_t version, uint32_t id)
+bind_manager(void *data, struct wl_resource *resource)
 {
-	struct wl_resource *resource;
-
-	resource =
-		wl_resource_create(client,
-				   &wl_data_device_manager_interface, 1, id);
-	if (resource == NULL) {
-		wl_client_post_no_memory(client);
-		return;
-	}
-
 	wl_resource_set_implementation(resource, &manager_interface,
 				       NULL, NULL);
 }
@@ -908,9 +897,9 @@ wl_data_device_set_keyboard_focus(struct weston_seat *seat)
 WL_EXPORT int
 wl_data_device_manager_init(struct wl_display *display)
 {
-	if (wl_global_create(display,
-			     &wl_data_device_manager_interface, 1,
-			     NULL, bind_manager) == NULL)
+	if (wl_global_create_auto(display,
+				  &wl_data_device_manager_interface, 1,
+				  NULL, bind_manager) == NULL)
 		return -1;
 
 	return 0;

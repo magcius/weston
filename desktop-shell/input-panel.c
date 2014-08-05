@@ -337,14 +337,9 @@ unbind_input_panel(struct wl_resource *resource)
 }
 
 static void
-bind_input_panel(struct wl_client *client,
-	      void *data, uint32_t version, uint32_t id)
+bind_input_panel(void *data, struct wl_resource *resource)
 {
 	struct desktop_shell *shell = data;
-	struct wl_resource *resource;
-
-	resource = wl_resource_create(client,
-				      &wl_input_panel_interface, 1, id);
 
 	if (shell->input_panel.binding != NULL) {
 		wl_resource_post_error(resource, WL_DISPLAY_ERROR_INVALID_OBJECT,
@@ -382,9 +377,9 @@ input_panel_setup(struct desktop_shell *shell)
 
 	wl_list_init(&shell->input_panel.surfaces);
 
-	if (wl_global_create(shell->compositor->wl_display,
-			     &wl_input_panel_interface, 1,
-			     shell, bind_input_panel) == NULL)
+	if (wl_global_create_auto(shell->compositor->wl_display,
+				  &wl_input_panel_interface, 1,
+				  shell, bind_input_panel) == NULL)
 		return -1;
 
 	return 0;

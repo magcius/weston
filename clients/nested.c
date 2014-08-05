@@ -717,16 +717,10 @@ static const struct wl_compositor_interface compositor_interface = {
 };
 
 static void
-compositor_bind(struct wl_client *client,
-		void *data, uint32_t version, uint32_t id)
+compositor_bind(void *data, struct wl_resource *resource)
 {
-	struct nested *nested = data;
-	struct wl_resource *resource;
-
-	resource = wl_resource_create(client, &wl_compositor_interface,
-				      MIN(version, 3), id);
 	wl_resource_set_implementation(resource, &compositor_interface,
-				       nested, NULL);
+				       data, NULL);
 }
 
 static int
@@ -745,9 +739,9 @@ nested_init_compositor(struct nested *nested)
 	display_watch_fd(nested->display, fd,
 			 EPOLLIN, &nested->child_task);
 
-	if (!wl_global_create(nested->child_display,
-			      &wl_compositor_interface, 1,
-			      nested, compositor_bind))
+	if (!wl_global_create_auto(nested->child_display,
+				   &wl_compositor_interface, 1,
+				   nested, compositor_bind))
 		return -1;
 
 	wl_display_init_shm(nested->child_display);

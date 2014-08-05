@@ -375,22 +375,11 @@ static const struct wl_text_input_manager_interface text_input_manager_implement
 };
 
 static void
-bind_text_input_manager(struct wl_client *client,
-			void *data,
-			uint32_t version,
-			uint32_t id)
+bind_text_input_manager(void *data, struct wl_resource *resource)
 {
-	struct text_input_manager *text_input_manager = data;
-	struct wl_resource *resource;
-
-	/* No checking for duplicate binding necessary.  */
-	resource =
-		wl_resource_create(client,
-				   &wl_text_input_manager_interface, 1, id);
-	if (resource)
-		wl_resource_set_implementation(resource,
-					       &text_input_manager_implementation,
-					       text_input_manager, NULL);
+	wl_resource_set_implementation(resource,
+				       &text_input_manager_implementation,
+				       data, NULL);
 }
 
 static void
@@ -414,9 +403,9 @@ text_input_manager_create(struct weston_compositor *ec)
 	text_input_manager->ec = ec;
 
 	text_input_manager->text_input_manager_global =
-		wl_global_create(ec->wl_display,
-				 &wl_text_input_manager_interface, 1,
-				 text_input_manager, bind_text_input_manager);
+		wl_global_create_auto(ec->wl_display,
+				      &wl_text_input_manager_interface, 1,
+				      text_input_manager, bind_text_input_manager);
 
 	text_input_manager->destroy_listener.notify = text_input_manager_notifier_destroy;
 	wl_signal_add(&ec->destroy_signal, &text_input_manager->destroy_listener);
@@ -775,17 +764,10 @@ unbind_input_method(struct wl_resource *resource)
 }
 
 static void
-bind_input_method(struct wl_client *client,
-		  void *data,
-		  uint32_t version,
-		  uint32_t id)
+bind_input_method(void *data, struct wl_resource *resource)
 {
 	struct input_method *input_method = data;
 	struct text_backend *text_backend = input_method->text_backend;
-	struct wl_resource *resource;
-
-	resource =
-		wl_resource_create(client, &wl_input_method_interface, 1, id);
 
 	if (input_method->input_method_binding != NULL) {
 		wl_resource_post_error(resource, WL_DISPLAY_ERROR_INVALID_OBJECT,
@@ -793,7 +775,7 @@ bind_input_method(struct wl_client *client,
 		return;
 	}
 
-	if (text_backend->input_method.client != client) {
+	if (text_backend->input_method.client != wl_resource_get_client(resource)) {
 		wl_resource_post_error(resource, WL_DISPLAY_ERROR_INVALID_OBJECT,
 				       "permission to bind input_method denied");
 		return;
@@ -802,7 +784,6 @@ bind_input_method(struct wl_client *client,
 	wl_resource_set_implementation(resource, NULL, input_method,
 				       unbind_input_method);
 	input_method->input_method_binding = resource;
-
 	text_backend->input_method.binding = resource;
 }
 
@@ -922,8 +903,8 @@ handle_seat_created(struct wl_listener *listener,
 	input_method->text_backend = text_backend;
 
 	input_method->input_method_global =
-		wl_global_create(ec->wl_display, &wl_input_method_interface, 1,
-				 input_method, bind_input_method);
+		wl_global_create_auto(ec->wl_display, &wl_input_method_interface, 1,
+				      input_method, bind_input_method);
 
 	input_method->destroy_listener.notify = input_method_notifier_destroy;
 	wl_signal_add(&seat->destroy_signal, &input_method->destroy_listener);

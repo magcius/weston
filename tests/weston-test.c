@@ -245,12 +245,10 @@ static const struct wl_test_interface test_implementation = {
 };
 
 static void
-bind_test(struct wl_client *client, void *data, uint32_t version, uint32_t id)
+bind_test(void *data, struct wl_resource *resource)
 {
 	struct weston_test *test = data;
-	struct wl_resource *resource;
 
-	resource = wl_resource_create(client, &wl_test_interface, 1, id);
 	wl_resource_set_implementation(resource,
 				       &test_implementation, test, NULL);
 
@@ -298,8 +296,8 @@ module_init(struct weston_compositor *ec,
 	test->compositor = ec;
 	weston_layer_init(&test->layer, &ec->cursor_layer.link);
 
-	if (wl_global_create(ec->wl_display, &wl_test_interface, 1,
-			     test, bind_test) == NULL)
+	if (wl_global_create_auto(ec->wl_display, &wl_test_interface, 1,
+				  test, bind_test) == NULL)
 		return -1;
 
 	loop = wl_display_get_event_loop(ec->wl_display);

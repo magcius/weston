@@ -1419,19 +1419,9 @@ unbind_resource(struct wl_resource *resource)
 }
 
 static void
-bind_workspace_manager(struct wl_client *client,
-		       void *data, uint32_t version, uint32_t id)
+bind_workspace_manager(void *data, struct wl_resource *resource)
 {
 	struct desktop_shell *shell = data;
-	struct wl_resource *resource;
-
-	resource = wl_resource_create(client,
-				      &workspace_manager_interface, 1, id);
-
-	if (resource == NULL) {
-		weston_log("couldn't add workspace manager object");
-		return;
-	}
 
 	wl_resource_set_implementation(resource,
 				       &workspace_manager_implementation,
@@ -5259,24 +5249,19 @@ handle_shell_client_destroy(struct wl_listener *listener, void *data)
 }
 
 static struct shell_client *
-shell_client_create(struct wl_client *client, struct desktop_shell *shell,
-		    const struct wl_interface *interface, uint32_t id)
+shell_client_create(struct desktop_shell *shell,
+		    struct wl_resource *resource)
 {
+	struct wl_client *client = wl_resource_get_client(resource);
 	struct shell_client *sc;
 
 	sc = zalloc(sizeof *sc);
 	if (sc == NULL) {
-		wl_client_post_no_memory(client);
+		wl_resource_post_no_memory(resource);
 		return NULL;
 	}
 
-	sc->resource = wl_resource_create(client, interface, 1, id);
-	if (sc->resource == NULL) {
-		free(sc);
-		wl_client_post_no_memory(client);
-		return NULL;
-	}
-
+	sc->resource = resource;
 	sc->client = client;
 	sc->shell = shell;
 	sc->destroy_listener.notify = handle_shell_client_destroy;
@@ -5286,27 +5271,26 @@ shell_client_create(struct wl_client *client, struct desktop_shell *shell,
 }
 
 static void
-bind_shell(struct wl_client *client, void *data, uint32_t version, uint32_t id)
+bind_shell(void *data, struct wl_resource *resource)
 {
 	struct desktop_shell *shell = data;
 	struct shell_client *sc;
 
-	sc = shell_client_create(client, shell, &wl_shell_interface, id);
-	if (sc)
-		wl_resource_set_implementation(sc->resource,
-					       &shell_implementation,
-					       sc, NULL);
+	sc = shell_client_create(shell, resource);
+	wl_resource_set_implementation(resource,
+				       &shell_implementation,
+				       sc, NULL);
 }
 
 static void
-bind_xdg_shell(struct wl_client *client, void *data, uint32_t version, uint32_t id)
+bind_xdg_shell(void *data, struct wl_resource *resource)
 {
 	struct desktop_shell *shell = data;
 	struct shell_client *sc;
 
-	sc = shell_client_create(client, shell, &xdg_shell_interface, id);
+	sc = shell_client_create(shell, resource);
 	if (sc)
-		wl_resource_set_dispatcher(sc->resource,
+		wl_resource_set_dispatcher(resource,
 					   xdg_shell_unversioned_dispatch,
 					   NULL, sc, NULL);
 }
@@ -5324,16 +5308,11 @@ unbind_desktop_shell(struct wl_resource *resource)
 }
 
 static void
-bind_desktop_shell(struct wl_client *client,
-		   void *data, uint32_t version, uint32_t id)
+bind_desktop_shell(void *data, struct wl_resource *resource)
 {
 	struct desktop_shell *shell = data;
-	struct wl_resource *resource;
 
-	resource = wl_resource_create(client, &desktop_shell_interface,
-				      MIN(version, 2), id);
-
-	if (client != shell->child.client) {
+	if (wl_resource_get_client(resource) != shell->child.client) {
 		wl_resource_post_error(resource, WL_DISPLAY_ERROR_INVALID_OBJECT,
 				       "permission to bind desktop_shell denied");
 		return;
@@ -5344,7 +5323,7 @@ bind_desktop_shell(struct wl_client *client,
 				       shell, unbind_desktop_shell);
 	shell->child.desktop_shell = resource;
 
-	if (version < 2)
+	if (wl_resource_get_version(resource) < 2)
 		shell_fade_startup(shell);
 }
 
@@ -5411,13 +5390,9 @@ unbind_screensaver(struct wl_resource *resource)
 }
 
 static void
-bind_screensaver(struct wl_client *client,
-		 void *data, uint32_t version, uint32_t id)
+bind_screensaver(void *data, struct wl_resource *resource)
 {
 	struct desktop_shell *shell = data;
-	struct wl_resource *resource;
-
-	resource = wl_resource_create(client, &screensaver_interface, 1, id);
 
 	if (shell->screensaver.binding != NULL) {
 		wl_resource_post_error(resource, WL_DISPLAY_ERROR_INVALID_OBJECT,
@@ -6242,25 +6217,25 @@ module_init(struct weston_compositor *ec,
 	wl_list_init(&shell->workspaces.animation.link);
 	shell->workspaces.animation.frame = animate_workspace_change_frame;
 
-	if (wl_global_create(ec->wl_display, &wl_shell_interface, 1,
+	if (wl_global_create_auto(ec->wl_display, &wl_shell_interface, 1,
 				  shell, bind_shell) == NULL)
 		return -1;
 
-	if (wl_global_create(ec->wl_display, &xdg_shell_interface, 1,
+	if (wl_global_create_auto(ec->wl_display, &xdg_shell_interface, 1,
 				  shell, bind_xdg_shell) == NULL)
 		return -1;
 
-	if (wl_global_create(ec->wl_display,
-			     &desktop_shell_interface, 2,
-			     shell, bind_desktop_shell) == NULL)
+	if (wl_global_create_auto(ec->wl_display,
+				  &desktop_shell_interface, 2,
+				  shell, bind_desktop_shell) == NULL)
 		return -1;
 
-	if (wl_global_create(ec->wl_display, &screensaver_interface, 1,
-			     shell, bind_screensaver) == NULL)
+	if (wl_global_create_auto(ec->wl_display, &screensaver_interface, 1,
+				  shell, bind_screensaver) == NULL)
 		return -1;
 
-	if (wl_global_create(ec->wl_display, &workspace_manager_interface, 1,
-			     shell, bind_workspace_manager) == NULL)
+	if (wl_global_create_auto(ec->wl_display, &workspace_manager_interface, 1,
+				  shell, bind_workspace_manager) == NULL)
 		return -1;
 
 	shell->child.deathstamp = weston_compositor_get_time();

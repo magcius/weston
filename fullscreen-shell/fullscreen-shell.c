@@ -762,21 +762,17 @@ client_destroyed(struct wl_listener *listener, void *data)
 }
 
 static void
-bind_fullscreen_shell(struct wl_client *client, void *data, uint32_t version,
-		       uint32_t id)
+bind_fullscreen_shell(void *data, struct wl_resource *resource)
 {
 	struct fullscreen_shell *shell = data;
-	struct wl_resource *resource;
 
-	if (shell->client != NULL && shell->client != client)
+	if (shell->client != NULL && shell->client != wl_resource_get_client(resource))
 		return;
 	else if (shell->client == NULL) {
-		shell->client = client;
-		wl_client_add_destroy_listener(client, &shell->client_destroyed);
+		shell->client = wl_resource_get_client(resource);
+		wl_client_add_destroy_listener(shell->client, &shell->client_destroyed);
 	}
 
-	resource = wl_resource_create(client, &_wl_fullscreen_shell_interface,
-				      1, id);
 	wl_resource_set_implementation(resource,
 				       &fullscreen_shell_implementation,
 				       shell, NULL);
@@ -822,9 +818,9 @@ module_init(struct weston_compositor *compositor,
 	wl_list_for_each(seat, &compositor->seat_list, link)
 		seat_created(NULL, seat);
 
-	wl_global_create(compositor->wl_display,
-			 &_wl_fullscreen_shell_interface, 1, shell,
-			 bind_fullscreen_shell);
+	wl_global_create_auto(compositor->wl_display,
+			      &_wl_fullscreen_shell_interface, 1, shell,
+			      bind_fullscreen_shell);
 
 	return 0;
 }

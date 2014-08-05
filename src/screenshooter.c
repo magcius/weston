@@ -253,16 +253,11 @@ struct screenshooter_interface screenshooter_implementation = {
 };
 
 static void
-bind_shooter(struct wl_client *client,
-	     void *data, uint32_t version, uint32_t id)
+bind_shooter(void *data, struct wl_resource *resource)
 {
 	struct screenshooter *shooter = data;
-	struct wl_resource *resource;
 
-	resource = wl_resource_create(client,
-				      &screenshooter_interface, 1, id);
-
-	if (client != shooter->client) {
+	if (wl_resource_get_client(resource) != shooter->client) {
 		wl_resource_post_error(resource, WL_DISPLAY_ERROR_INVALID_OBJECT,
 				       "screenshooter failed: permission denied");
 		return;
@@ -604,9 +599,9 @@ screenshooter_create(struct weston_compositor *ec)
 	shooter->ec = ec;
 	shooter->client = NULL;
 
-	shooter->global = wl_global_create(ec->wl_display,
-					   &screenshooter_interface, 1,
-					   shooter, bind_shooter);
+	shooter->global = wl_global_create_auto(ec->wl_display,
+						&screenshooter_interface, 1,
+						shooter, bind_shooter);
 	weston_compositor_add_key_binding(ec, KEY_S, MODIFIER_SUPER,
 					  screenshooter_binding, shooter);
 	weston_compositor_add_key_binding(ec, KEY_R, MODIFIER_SUPER,

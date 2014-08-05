@@ -1809,14 +1809,11 @@ static const struct wl_seat_interface seat_interface = {
 };
 
 static void
-bind_seat(struct wl_client *client, void *data, uint32_t version, uint32_t id)
+bind_seat(void *data, struct wl_resource *resource)
 {
 	struct weston_seat *seat = data;
-	struct wl_resource *resource;
 	enum wl_seat_capability caps = 0;
 
-	resource = wl_resource_create(client,
-				      &wl_seat_interface, MIN(version, 3), id);
 	wl_list_insert(&seat->base_resource_list, wl_resource_get_link(resource));
 	wl_resource_set_implementation(resource, &seat_interface, data,
 				       unbind_resource);
@@ -1829,7 +1826,7 @@ bind_seat(struct wl_client *client, void *data, uint32_t version, uint32_t id)
 		caps |= WL_SEAT_CAPABILITY_TOUCH;
 
 	wl_seat_send_capabilities(resource, caps);
-	if (version >= WL_SEAT_NAME_SINCE_VERSION)
+	if (wl_resource_get_version(resource) >= WL_SEAT_NAME_SINCE_VERSION)
 		wl_seat_send_name(resource, seat->seat_name);
 }
 
@@ -2210,8 +2207,8 @@ weston_seat_init(struct weston_seat *seat, struct weston_compositor *ec,
 	wl_signal_init(&seat->destroy_signal);
 	wl_signal_init(&seat->updated_caps_signal);
 
-	seat->global = wl_global_create(ec->wl_display, &wl_seat_interface, 4,
-					seat, bind_seat);
+	seat->global = wl_global_create_auto(ec->wl_display, &wl_seat_interface, 4,
+					     seat, bind_seat);
 
 	seat->compositor = ec;
 	seat->modifier_state = 0;

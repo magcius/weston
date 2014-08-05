@@ -2980,20 +2980,10 @@ static const struct wl_subcompositor_interface subcompositor_interface = {
 };
 
 static void
-bind_subcompositor(struct wl_client *client,
-		   void *data, uint32_t version, uint32_t id)
+bind_subcompositor(void *data, struct wl_resource *resource)
 {
-	struct weston_compositor *compositor = data;
-	struct wl_resource *resource;
-
-	resource =
-		wl_resource_create(client, &wl_subcompositor_interface, 1, id);
-	if (resource == NULL) {
-		wl_client_post_no_memory(client);
-		return;
-	}
 	wl_resource_set_implementation(resource, &subcompositor_interface,
-				       compositor, NULL);
+				       data, NULL);
 }
 
 static void
@@ -3120,19 +3110,10 @@ static void unbind_resource(struct wl_resource *resource)
 }
 
 static void
-bind_output(struct wl_client *client,
-	    void *data, uint32_t version, uint32_t id)
+bind_output(void *data, struct wl_resource *resource)
 {
 	struct weston_output *output = data;
 	struct weston_mode *mode;
-	struct wl_resource *resource;
-
-	resource = wl_resource_create(client, &wl_output_interface,
-				      MIN(version, 2), id);
-	if (resource == NULL) {
-		wl_client_post_no_memory(client);
-		return;
-	}
 
 	wl_list_insert(&output->resource_list, wl_resource_get_link(resource));
 	wl_resource_set_implementation(resource, NULL, data, unbind_resource);
@@ -3145,7 +3126,7 @@ bind_output(struct wl_client *client,
 				output->subpixel,
 				output->make, output->model,
 				output->transform);
-	if (version >= WL_OUTPUT_SCALE_SINCE_VERSION)
+	if (wl_resource_get_version(resource) >= WL_OUTPUT_SCALE_SINCE_VERSION)
 		wl_output_send_scale(resource,
 				     output->current_scale);
 
@@ -3157,7 +3138,7 @@ bind_output(struct wl_client *client,
 				    mode->refresh);
 	}
 
-	if (version >= WL_OUTPUT_DONE_SINCE_VERSION)
+	if (wl_resource_get_version(resource) >= WL_OUTPUT_DONE_SINCE_VERSION)
 		wl_output_send_done(resource);
 }
 
@@ -3397,8 +3378,8 @@ weston_output_init(struct weston_output *output, struct weston_compositor *c,
 	output->compositor->output_id_pool |= 1 << output->id;
 
 	output->global =
-		wl_global_create(c->wl_display, &wl_output_interface, 2,
-				 output, bind_output);
+		wl_global_create_auto(c->wl_display, &wl_output_interface, 2,
+				      output, bind_output);
 	wl_signal_emit(&c->output_created_signal, output);
 }
 
@@ -3651,38 +3632,17 @@ static const struct wl_scaler_interface scaler_interface = {
 };
 
 static void
-bind_scaler(struct wl_client *client,
-	    void *data, uint32_t version, uint32_t id)
+bind_scaler(void *data, struct wl_resource *resource)
 {
-	struct wl_resource *resource;
-
-	resource = wl_resource_create(client, &wl_scaler_interface,
-				      MIN(version, 2), id);
-	if (resource == NULL) {
-		wl_client_post_no_memory(client);
-		return;
-	}
-
 	wl_resource_set_implementation(resource, &scaler_interface,
 				       NULL, NULL);
 }
 
 static void
-compositor_bind(struct wl_client *client,
-		void *data, uint32_t version, uint32_t id)
+compositor_bind(void *data, struct wl_resource *resource)
 {
-	struct weston_compositor *compositor = data;
-	struct wl_resource *resource;
-
-	resource = wl_resource_create(client, &wl_compositor_interface,
-				      MIN(version, 3), id);
-	if (resource == NULL) {
-		wl_client_post_no_memory(client);
-		return;
-	}
-
 	wl_resource_set_implementation(resource, &compositor_interface,
-				       compositor, NULL);
+				       data, NULL);
 }
 
 static void
@@ -3750,16 +3710,16 @@ weston_compositor_init(struct weston_compositor *ec,
 
 	ec->output_id_pool = 0;
 
-	if (!wl_global_create(display, &wl_compositor_interface, 3,
-			      ec, compositor_bind))
+	if (!wl_global_create_auto(display, &wl_compositor_interface, 3,
+				   ec, compositor_bind))
 		return -1;
 
-	if (!wl_global_create(display, &wl_subcompositor_interface, 1,
-			      ec, bind_subcompositor))
+	if (!wl_global_create_auto(display, &wl_subcompositor_interface, 1,
+				   ec, bind_subcompositor))
 		return -1;
 
-	if (!wl_global_create(ec->wl_display, &wl_scaler_interface, 2,
-			      ec, bind_scaler))
+	if (!wl_global_create_auto(ec->wl_display, &wl_scaler_interface, 2,
+				   ec, bind_scaler))
 		return -1;
 
 	wl_list_init(&ec->view_list);
