@@ -247,7 +247,7 @@ struct window {
 	struct xdg_popup *xdg_popup;
 
 	struct window *parent;
-	struct wl_surface *last_parent_surface;
+	struct xdg_surface *last_parent_surface;
 
 	struct window_frame *frame;
 
@@ -4007,13 +4007,13 @@ static const struct xdg_surface_listener xdg_surface_listener = {
 static void
 window_sync_parent(struct window *window)
 {
-	struct wl_surface *parent_surface;
+	struct xdg_surface *parent_surface;
 
 	if (!window->xdg_surface)
 		return;
 
 	if (window->parent)
-		parent_surface = window->parent->main_surface->surface;
+		parent_surface = window->parent->xdg_surface;
 	else
 		parent_surface = NULL;
 
