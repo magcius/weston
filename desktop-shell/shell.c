@@ -3407,10 +3407,29 @@ add_popup_grab(struct shell_surface *shsurf, struct shell_seat *shseat, int32_t 
 	}
 }
 
+static struct shell_surface *
+get_top_surface(struct shell_seat *shseat)
+{
+	if (wl_list_empty(&shseat->popup_grab.surfaces_list)) {
+		return NULL;
+	} else {
+		struct wl_list *link = shseat->popup_grab.surfaces_list.next;
+		struct shell_surface *shsurf = container_of(link, struct shell_surface, popup.grab_link);
+		return shsurf;
+	}
+}
+
 static void
 remove_popup_grab(struct shell_surface *shsurf)
 {
 	struct shell_seat *shseat = shsurf->popup.shseat;
+
+	if (shell_surface_is_xdg_popup(shsurf) && get_top_surface(shseat) != shsurf) {
+		wl_resource_post_error(shsurf->resource,
+				       XDG_POPUP_ERROR_NOT_THE_TOPMOST_POPUP,
+				       "xdg_popup was destroyed while it was not the topmost popup.");
+		return;
+	}
 
 	wl_list_remove(&shsurf->popup.grab_link);
 	wl_list_init(&shsurf->popup.grab_link);
@@ -4044,7 +4063,16 @@ create_xdg_popup(struct shell_client *owner, void *shell,
 		 uint32_t serial,
 		 int32_t x, int32_t y)
 {
-	struct shell_surface *shsurf;
+	struct shell_surface *shsurf, *parent_shsurf, *top_shsurf;
+
+	parent_shsurf = get_shell_surface(parent);
+	top_shsurf = get_top_surface(seat);
+	if (top_shsurf != NULL && top_shsurf != parent_shsurf) {
+		wl_resource_post_error(owner->resource,
+				       XDG_POPUP_ERROR_NOT_THE_TOPMOST_POPUP,
+				       "xdg_popup was not created on the topmost popup");
+		return NULL;
+	}
 
 	shsurf = create_common_surface(owner, shell, surface, client);
 	if (!shsurf)
