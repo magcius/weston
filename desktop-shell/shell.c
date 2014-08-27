@@ -4071,7 +4071,7 @@ xdg_shell_unversioned_dispatch(const void *implementation,
 		return 0;
 	}
 
-#define XDG_SERVER_VERSION 4
+#define XDG_SERVER_VERSION 5
 
 	static_assert(XDG_SERVER_VERSION == XDG_SHELL_VERSION_CURRENT,
 		      "shell implementation doesn't match protocol version");
