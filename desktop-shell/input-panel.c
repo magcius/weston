@@ -309,9 +309,7 @@ input_panel_get_input_panel_surface(struct wl_client *client,
 
 	ipsurf = create_input_panel_surface(shell, surface);
 	if (!ipsurf) {
-		wl_resource_post_error(surface_resource,
-				       WL_DISPLAY_ERROR_INVALID_OBJECT,
-				       "surface->configure already set");
+		wl_resource_post_no_memory(resource);
 		return;
 	}
 
