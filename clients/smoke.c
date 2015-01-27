@@ -186,9 +186,6 @@ redraw_handler(struct widget *widget, void *data)
 	advect(smoke, time / 30,
 	       smoke->b[1].u, smoke->b[1].v,
 	       smoke->b[1].v, smoke->b[0].v);
-	project(smoke, time / 30,
-		smoke->b[0].u, smoke->b[0].v,
-		smoke->b[1].u, smoke->b[1].v);
 
 	diffuse(smoke, time / 30, smoke->b[0].d, smoke->b[1].d);
 	advect(smoke, time / 30,
