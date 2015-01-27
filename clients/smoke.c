@@ -38,7 +38,6 @@ struct smoke {
 	struct window *window;
 	struct widget *widget;
 	int width, height;
-	int current;
 	struct { float *d, *u, *v; } b[2];
 };
 
@@ -155,7 +154,7 @@ static void render(struct smoke *smoke, cairo_surface_t *surface)
 	stride = cairo_image_surface_get_stride(surface);
 
 	for (y = 1; y < height - 1; y++) {
-		s = smoke->b[smoke->current].d + y * smoke->height;
+		s = smoke->b[0].d + y * smoke->height;
 		d = (uint32_t *) (dest + y * stride);
 		for (x = 1; x < width - 1; x++) {
 			c = (int) (s[x] * 800);
@@ -289,7 +288,6 @@ int main(int argc, char *argv[])
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	srandom(ts.tv_nsec);
 
-	smoke.current = 0;
 	size = smoke.height * smoke.width;
 	smoke.b[0].d = calloc(size, sizeof(float));
 	smoke.b[0].u = calloc(size, sizeof(float));
