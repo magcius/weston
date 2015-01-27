@@ -38,7 +38,7 @@ struct smoke {
 	struct window *window;
 	struct widget *widget;
 	int width, height;
-	struct { float *d, *u, *v; } b[2];
+	struct { float *d, *u, *v, *tmp1, *tmp2; } b;
 };
 
 static void diffuse(struct smoke *smoke, uint32_t time,
@@ -154,7 +154,7 @@ static void render(struct smoke *smoke, cairo_surface_t *surface)
 	stride = cairo_image_surface_get_stride(surface);
 
 	for (y = 1; y < height - 1; y++) {
-		s = smoke->b[0].d + y * smoke->height;
+		s = smoke->b.d + y * smoke->height;
 		d = (uint32_t *) (dest + y * stride);
 		for (x = 1; x < width - 1; x++) {
 			c = (int) (s[x] * 800);
@@ -175,22 +175,22 @@ redraw_handler(struct widget *widget, void *data)
 	uint32_t time = widget_get_last_time(smoke->widget);
 	cairo_surface_t *surface;
 
-	diffuse(smoke, time / 30, smoke->b[0].u, smoke->b[1].u);
-	diffuse(smoke, time / 30, smoke->b[0].v, smoke->b[1].v);
+	diffuse(smoke, time / 30, smoke->b.u, smoke->b.tmp1);
+	diffuse(smoke, time / 30, smoke->b.v, smoke->b.tmp2);
 	project(smoke, time / 30,
-		smoke->b[1].u, smoke->b[1].v,
-		smoke->b[0].u, smoke->b[0].v);
+		smoke->b.tmp1, smoke->b.tmp2,
+		smoke->b.u, smoke->b.v);
 	advect(smoke, time / 30,
-	       smoke->b[1].u, smoke->b[1].v,
-	       smoke->b[1].u, smoke->b[0].u);
+	       smoke->b.tmp1, smoke->b.tmp2,
+	       smoke->b.tmp1, smoke->b.u);
 	advect(smoke, time / 30,
-	       smoke->b[1].u, smoke->b[1].v,
-	       smoke->b[1].v, smoke->b[0].v);
+	       smoke->b.tmp1, smoke->b.tmp2,
+	       smoke->b.tmp2, smoke->b.v);
 
-	diffuse(smoke, time / 30, smoke->b[0].d, smoke->b[1].d);
+	diffuse(smoke, time / 30, smoke->b.d, smoke->b.tmp1);
 	advect(smoke, time / 30,
-	       smoke->b[0].u, smoke->b[0].v,
-	       smoke->b[1].d, smoke->b[0].d);
+	       smoke->b.u, smoke->b.v,
+	       smoke->b.tmp1, smoke->b.d);
 
 	surface = window_get_surface(smoke->window);
 
@@ -229,9 +229,9 @@ smoke_motion_handler(struct smoke *smoke, float x, float y)
 	for (i = i0; i < i1; i++)
 		for (j = j0; j < j1; j++) {
 			k = j * smoke->width + i;
-			smoke->b[0].u[k] += 256 - (random() & 512);
-			smoke->b[0].v[k] += 256 - (random() & 512);
-			smoke->b[0].d[k] += 1;
+			smoke->b.u[k] += 256 - (random() & 512);
+			smoke->b.v[k] += 256 - (random() & 512);
+			smoke->b.d[k] += 1;
 		}
 }
 
@@ -286,12 +286,11 @@ int main(int argc, char *argv[])
 	srandom(ts.tv_nsec);
 
 	size = smoke.height * smoke.width;
-	smoke.b[0].d = calloc(size, sizeof(float));
-	smoke.b[0].u = calloc(size, sizeof(float));
-	smoke.b[0].v = calloc(size, sizeof(float));
-	smoke.b[1].d = calloc(size, sizeof(float));
-	smoke.b[1].u = calloc(size, sizeof(float));
-	smoke.b[1].v = calloc(size, sizeof(float));
+	smoke.b.d = calloc(size, sizeof(float));
+	smoke.b.u = calloc(size, sizeof(float));
+	smoke.b.v = calloc(size, sizeof(float));
+	smoke.b.tmp1 = calloc(size, sizeof(float));
+	smoke.b.tmp2 = calloc(size, sizeof(float));
 
 	widget_set_motion_handler(smoke.widget, mouse_motion_handler);
 	widget_set_touch_motion_handler(smoke.widget, touch_motion_handler);
